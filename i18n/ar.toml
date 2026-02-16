@@ -1,0 +1,43 @@
+[search_placeholder]
+other = "بحث..."
+
+[words]
+other = "كلمة"
+
+[reading_time_min]
+other = "دقيقة للقراءة"
+
+[table_of_contents]
+other = "جدول المحتويات"
+
+[back_to_top]
+other = "العودة للأعلى"
+
+[prev]
+other = "السابق"
+
+[next]
+other = "التالي"
+
+[categories]
+other = "التصنيفات"
+
+[tags]
+other = "الوسوم"
+
+[home]
+other = "الرئيسية"
+
+[posts]
+other = "المقالات"
+
+[page_not_found]
+other = "عذراً، الصفحة غير موجودة :("
+
+[post_count]
+zero = "لا توجد مقالات"
+one = "مقالة واحدة"
+two = "مقالتان"
+few = "{{ .Count }} مقالات"
+many = "{{ .Count }} مقالة"
+other = "{{ .Count }} مقالة"

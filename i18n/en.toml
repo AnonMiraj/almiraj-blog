@@ -1,0 +1,39 @@
+[search_placeholder]
+other = "Search…"
+
+[words]
+other = "words"
+
+[reading_time_min]
+other = "min read"
+
+[table_of_contents]
+other = "Table of Contents"
+
+[back_to_top]
+other = "Back to Top"
+
+[prev]
+other = "prev"
+
+[next]
+other = "next"
+
+[categories]
+other = "Categories"
+
+[tags]
+other = "Tags"
+
+[home]
+other = "Home"
+
+[posts]
+other = "Posts"
+
+[page_not_found]
+other = "You once were found, but now you're lost :("
+
+[post_count]
+one = "{{ .Count }} post"
+other = "{{ .Count }} posts"

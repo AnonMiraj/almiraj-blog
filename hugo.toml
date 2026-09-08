@@ -19,17 +19,16 @@ pagerSize = 5
 
 
 [params]
-  author = "Ezzeldin"
+  [params.author]
+    name = "Ezzeldin"
   description = "Personal blog of Ezzeldin - Almiraj"
-  footnote = """
-  Powered by  <a class=link href=https://gohugo.io target=_blank rel=noopener>Hugo</a>
-  """
+  footnote = ""
   customCSS = ["./static/css/syntax.css"]
   customJS = []
   dateFormat = "2 January 2006"
   emphasisWithDots = true
   toc = true
-  rootFontSize = "105%"
+  rootFontSize = "120%"
   math = true
   numberedSubtitles = true
 
@@ -56,7 +55,10 @@ pagerSize = 5
 
 [languages]
   [languages.en]
-    languageName = "English"
+    languageDirection = "ltr"
+    title = "Almiraj"
+    [languages.en.params]
+      rootFontSize = "120%"
     weight = 1
     languageDirection = "ltr"
     title = "Almiraj"
@@ -86,6 +88,9 @@ pagerSize = 5
     languageName = "العربية"
     weight = 2
     languageDirection = "rtl"
+    title = "المعراج"
+    [languages.ar.params]
+      rootFontSize = "120%"
     title = "المعراج"
     [languages.ar.menu]
       [[languages.ar.menu.main]]

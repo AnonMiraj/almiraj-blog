@@ -1,0 +1,277 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Almiraj</title><link>https://almiraj.xyz/</link><description>Recent content on Almiraj</description><generator>Hugo -- gohugo.io</generator><language>en</language><lastBuildDate>Sun, 09 Aug 2026 00:00:00 +0000</lastBuildDate><atom:link href="https://almiraj.xyz/index.xml" rel="self" type="application/rss+xml"/><item><title>Chasing Clang regressions</title><link>https://almiraj.xyz/posts/optimizing_clang/</link><pubDate>Sun, 09 Aug 2026 00:00:00 +0000</pubDate><guid>https://almiraj.xyz/posts/optimizing_clang/</guid><description>&lt;p>So yeah, this summer I am a compiler research fellow with &lt;a href="https://compiler-research.org/blogs/cppalliance_fellowships_2026/">cppalliance&lt;/a>, where I need to somehow improve the performance of clang???!!&lt;/p>
+&lt;p>At first I was very lost on where to actually start.
+Diving deep directly into clang to find an area to improve didn&amp;rsquo;t seem like the best idea. In fact, I did it a few weeks ago and was kinda grilled by the reviewers (:&lt;/p>
+&lt;p>So another idea was, instead of trying to do something entirely new, let&amp;rsquo;s look into the gaps between the work of clang maintainers.
+Of course, the clang people won&amp;rsquo;t leave any obvious slowdown, and most PRs are already optimized, and if there are any big regressions they are caught really fast. So we are even looking into more hidden gaps, but I was kinda hopeful with this idea and more scared of the first one.&lt;/p>
+&lt;h1 id="how-to-actually-find-regressions">How to actually find regressions?&lt;/h1>
+&lt;p>If we are gonna look for regressions, we need targets. At first I tried SQLite and got good results, but my mentor quickly recommended I use Boost.MPL, and it was one of the best targets.
+Out of the 20 regressions I have found during my search, MPL was affected noticeably by 8 of them.&lt;/p>
+&lt;p>And for clang, I decided to look for regressions within clang 18 up to clang 23.
+I don&amp;rsquo;t exactly know where a regression may be located, so I try a number of commits within each version and measure (At first I used wall clock, which was really stupid, and I quickly switched to using Ir instructions using valgrind.) how much each version of clang costs on the targets,
+then focus on that range to try to find what commit exactly caused that slowdown, slowly bisecting each range.&lt;/p>
+&lt;h1 id="first-fixable-regression-found">First fixable regression found&lt;/h1>
+&lt;p>So so far I had found a couple of regressions, but they were either intrinsic to how clang works now or already solved in trunk.
+But finally, after three weeks of searching, I found an actual fixable one.&lt;/p>
+&lt;p>Looks like when the Swift team&amp;rsquo;s fork upstreamed the &lt;a href="https://clang.llvm.org/docs/APINotes.html">API Notes&lt;/a> feature, they didn&amp;rsquo;t notice that it also always runs even when there&amp;rsquo;s no need for it, for every project. &lt;code>Sema::ProcessAPINotes&lt;/code> was being called on &lt;em>every single declaration&lt;/em>, whether or not the file had any API Notes files loaded at all (which, for basically most projects, is never).
+And this had remained unnoticed in clang for about two years.&lt;/p>
+&lt;p>So I filed an issue: &lt;a href="https://github.com/llvm/llvm-project/issues/202214">#202214 — Sema::ProcessAPINotes runs on every decl even when API Notes aren&amp;rsquo;t used&lt;/a>.&lt;/p>
+&lt;p>And it was fixed quite simply too, instead of running the API-notes lookup multiple times, just run it once and reuse the value, then also cache whether API Notes are needed at all so the per-decl work is skipped entirely.&lt;/p>
+&lt;p>So together that&amp;rsquo;s roughly a &lt;strong>−0.2%&lt;/strong> improvement in clang.&lt;/p>
+&lt;p>It seems very minuscule, but like I said, we are looking through the gaps and these very small easy to fix regressions accumulate over time and cause actual slowness.&lt;/p>
+&lt;h1 id="the-manyclangs-project">The ManyClangs Project!&lt;/h1>
+&lt;p>The &lt;a href="https://github.com/elfshaker/manyclangs">manyclangs&lt;/a> project saved this project a huge amount of time. One of the bottlenecks of the project was that compiling a commit of clang took so long, about 40 minutes for each one even with the help of ccache.
+So with the manyclangs, after downloading 5GBs of data, it does some compressing and version-control magic, and I can access the binary of any clang commit in seconds. This lets me do sweeps at much larger scales at incredible speed.&lt;/p>
+&lt;h1 id="benchmarking-projects">Benchmarking projects&lt;/h1>
+&lt;table>
+&lt;thead>
+&lt;tr>
+&lt;th>project&lt;/th>
+&lt;th>language&lt;/th>
+&lt;th>what it stresses in clang&lt;/th>
+&lt;/tr>
+&lt;/thead>
+&lt;tbody>
+&lt;tr>
+&lt;td>SQLite&lt;/td>
+&lt;td>C&lt;/td>
+&lt;td>the C frontend over one giant amalgamation, parsing and sema on a huge TU&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td>Boost.MPL&lt;/td>
+&lt;td>C++&lt;/td>
+&lt;td>heavy template instantiation / template metaprogramming&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td>Boost.Hana&lt;/td>
+&lt;td>C++&lt;/td>
+&lt;td>modern metaprogramming, constexpr mixed with templates&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td>Boost.Spirit&lt;/td>
+&lt;td>C++&lt;/td>
+&lt;td>expression-template EDSLs and deep template nesting&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td>range-v3&lt;/td>
+&lt;td>C++&lt;/td>
+&lt;td>ranges and heavily constrained templates&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td>fmt&lt;/td>
+&lt;td>C++&lt;/td>
+&lt;td>templates plus constexpr&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td>kernel headers&lt;/td>
+&lt;td>C&lt;/td>
+&lt;td>the preprocessor and parser (tons of macros)&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td>Eigen&lt;/td>
+&lt;td>C++&lt;/td>
+&lt;td>expression templates (linear algebra)&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td>stdexec&lt;/td>
+&lt;td>C++20&lt;/td>
+&lt;td>concepts and constraint satisfaction&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td>mp-units&lt;/td>
+&lt;td>C++23&lt;/td>
+&lt;td>concepts plus non-type template parameters (a units library)&lt;/td>
+&lt;/tr>
+&lt;/tbody>
+&lt;/table>
+&lt;p>I tried, when adding new projects, to make sure they test a new part of clang, and so far each has helped in finding some regressions.&lt;/p>
+&lt;h1 id="how-is-the-work-so-far">How is the work so far&lt;/h1>
+&lt;p>So far I&amp;rsquo;ve landed a bunch of these small fixes upstream. Here&amp;rsquo;s every PR, what it fixed, and how much it bought:&lt;/p>
+&lt;table>
+&lt;thead>
+&lt;tr>
+&lt;th>#&lt;/th>
+&lt;th>PR&lt;/th>
+&lt;th>fix&lt;/th>
+&lt;th>local benchmarks&lt;/th>
+&lt;th>LLVM tracker&lt;/th>
+&lt;/tr>
+&lt;/thead>
+&lt;tbody>
+&lt;tr>
+&lt;td>1&lt;/td>
+&lt;td>&lt;a href="https://github.com/llvm/llvm-project/pull/202727">#202727&lt;/a>&lt;/td>
+&lt;td>APINotes: early return when no apinotes files are loaded&lt;/td>
+&lt;td>-0.4% MPL&lt;/td>
+&lt;td>&lt;strong>−0.11%&lt;/strong>&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td>2&lt;/td>
+&lt;td>&lt;a href="https://github.com/llvm/llvm-project/pull/203710">#203710&lt;/a>&lt;/td>
+&lt;td>APINotes: skip per-decl work when no notes are active&lt;/td>
+&lt;td>(follow-up to above)&lt;/td>
+&lt;td>&lt;strong>−0.07%&lt;/strong>&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td>3&lt;/td>
+&lt;td>&lt;a href="https://github.com/llvm/llvm-project/pull/204926">#204926&lt;/a>&lt;/td>
+&lt;td>only record lexer check-points when colors are enabled&lt;/td>
+&lt;td>part of a +0.3% step&lt;/td>
+&lt;td>+0.07%&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td>4&lt;/td>
+&lt;td>&lt;a href="https://github.com/llvm/llvm-project/pull/209355">#209355&lt;/a>&lt;/td>
+&lt;td>fix check-point recording under default colors&lt;/td>
+&lt;td>fixes a regression &lt;strong>#204926 caused&lt;/strong>&lt;/td>
+&lt;td>&lt;strong>−0.20%&lt;/strong>&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td>5&lt;/td>
+&lt;td>&lt;a href="https://github.com/llvm/llvm-project/pull/208862">#208862&lt;/a>&lt;/td>
+&lt;td>skip macro source-location check for names that can&amp;rsquo;t warn&lt;/td>
+&lt;td>−0.7% kernel, −0.3% MPL&lt;/td>
+&lt;td>~0%&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td>6&lt;/td>
+&lt;td>&lt;a href="https://github.com/llvm/llvm-project/pull/208139">#208139&lt;/a>&lt;/td>
+&lt;td>compute current instantiation less often in &lt;code>lookupInBases&lt;/code>&lt;/td>
+&lt;td>~99% of a +0.4% step&lt;/td>
+&lt;td>&lt;strong>−0.03%&lt;/strong>&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td>7&lt;/td>
+&lt;td>&lt;a href="https://github.com/llvm/llvm-project/pull/209694">#209694&lt;/a>&lt;/td>
+&lt;td>no typo-correction suggestions for disabled diagnostics&lt;/td>
+&lt;td>&lt;strong>−1.2% MPL&lt;/strong>, −0.2% kernel&lt;/td>
+&lt;td>&lt;strong>−0.28%&lt;/strong>&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td>8&lt;/td>
+&lt;td>&lt;a href="https://github.com/llvm/llvm-project/pull/206363">#206363&lt;/a>&lt;/td>
+&lt;td>don&amp;rsquo;t add doc comments to the AST if not requested&lt;/td>
+&lt;td>−5% on comment-heavy TUs&lt;/td>
+&lt;td>&lt;strong>−0.24%&lt;/strong>&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td>9&lt;/td>
+&lt;td>&lt;a href="https://github.com/llvm/llvm-project/pull/212213">#212213&lt;/a>&lt;/td>
+&lt;td>cache the analysis-based warning policy instead of recomputing it per body&lt;/td>
+&lt;td>&lt;strong>−0.3% MPL&lt;/strong>, −0.5% fmt&lt;/td>
+&lt;td>&lt;strong>−0.11%&lt;/strong>&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td>10&lt;/td>
+&lt;td>&lt;a href="https://github.com/llvm/llvm-project/pull/213790">#213790&lt;/a>&lt;/td>
+&lt;td>avoid quadratic pack-indexing instantiation&lt;/td>
+&lt;td>O($N^2$)→O($N$): &lt;strong>~14.6× faster, ~31× less memory&lt;/strong> at N=8k&lt;/td>
+&lt;td>~0%&lt;/td>
+&lt;/tr>
+&lt;/tbody>
+&lt;/table>
+&lt;p>&lt;em>tracker = llvm-compile-time-tracker.com, geomean &lt;code>instructions:u&lt;/code>&lt;/em>&lt;/p>
+&lt;p>Overall I made clang faster by a whole 1.25%! All with very small and simple changes.&lt;/p>
+&lt;p>My mentor Vassil put it better than I could:&lt;/p>
+&lt;blockquote>
+&lt;p>For context, a 1% improvement in Clang&amp;rsquo;s compilation speed may seem modest, but its cumulative impact is enormous. Clang is one of the world&amp;rsquo;s most widely used C and C++ compilers, powering software development across operating systems, browsers, mobile platforms, cloud infrastructure, game engines, and embedded devices. Every day, millions of developers and continuous integration systems invoke Clang countless times. As a result, even a 1% reduction in compilation time translates into millions of CPU-hours saved annually worldwide, reducing energy consumption, lowering infrastructure costs, and enabling developers to receive build feedback more quickly. In a tool used at such global scale, seemingly small performance gains compound into substantial economic and productivity benefits, making a 1% improvement a real achievement.&lt;/p>
+&lt;/blockquote>
+&lt;p>Most of them were fixed with a few lines consisting of:&lt;/p>
+&lt;p>A. Caching with a simple boolean so we don&amp;rsquo;t recalculate a heavy computation &lt;a href="https://github.com/llvm/llvm-project/pull/203710">#203710&lt;/a>, &lt;a href="https://github.com/llvm/llvm-project/pull/208139">#208139&lt;/a>, &lt;a href="https://github.com/llvm/llvm-project/pull/212213">#212213&lt;/a>&lt;/p>
+&lt;p>B. Reorder some conditions so that the heavy computation is stopped early if it&amp;rsquo;s not needed &lt;a href="https://github.com/llvm/llvm-project/pull/202727">#202727&lt;/a>, &lt;a href="https://github.com/llvm/llvm-project/pull/208862">#208862&lt;/a>&lt;/p>
+&lt;p>C. Something ran when it shouldn&amp;rsquo;t, like how the computations for some of the diagnostics ran even though warnings were disabled &lt;a href="https://github.com/llvm/llvm-project/pull/204926">#204926&lt;/a>, &lt;a href="https://github.com/llvm/llvm-project/pull/209355">#209355&lt;/a>, &lt;a href="https://github.com/llvm/llvm-project/pull/209694">#209694&lt;/a>, &lt;a href="https://github.com/llvm/llvm-project/pull/206363">#206363&lt;/a>&lt;/p>
+&lt;h1 id="a-few-of-these-up-close">A few of these up close&lt;/h1>
+&lt;ol>
+&lt;li>
+&lt;p>&lt;strong>Skip the macro source-location check for names that can&amp;rsquo;t warn (&lt;a href="https://github.com/llvm/llvm-project/pull/208862">#208862&lt;/a>).&lt;/strong> Every time clang sees a macro name it was doing a source-location lookup to decide whether to warn about it, but most macro names can&amp;rsquo;t ever trigger that warning, so the lookup was pure waste. The fix checks the cheap &amp;ldquo;can this name even warn?&amp;rdquo; condition first and skips the lookup otherwise. That&amp;rsquo;s worth −0.7% on kernel headers (which are basically all macros) and −0.3% on MPL. It barely moves the tracker though, since its benchmark set isn&amp;rsquo;t nearly as macro-heavy as kernel headers, so the win doesn&amp;rsquo;t really show up there.&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>&lt;strong>Don&amp;rsquo;t add doc comments to the AST if not requested (&lt;a href="https://github.com/llvm/llvm-project/pull/206363">#206363&lt;/a>).&lt;/strong> clang was collecting doc comments into the AST even when nothing was going to use them, no &lt;code>-Wdocumentation&lt;/code>, nobody asking for them. On comment-heavy files that&amp;rsquo;s a lot of parsing and allocation for nothing. The fix only keeps the comments when something actually asked for them, which is up to −5% on comment-heavy TUs.&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>&lt;strong>Only record lexer check-points when colors are enabled (&lt;a href="https://github.com/llvm/llvm-project/pull/204926">#204926&lt;/a>)&lt;/strong> clang records &amp;ldquo;check-points&amp;rdquo; while lexing that are only needed to render colored diagnostics, so I gated recording them behind the colors-enabled check. Unfortunately, mid-PR another related PR got merged, so after fixing the merge conflicts, merging it caused my first clang regression, and it was quickly fixed with a follow-up.&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>&lt;strong>No typo-correction suggestions for disabled diagnostics (&lt;a href="https://github.com/llvm/llvm-project/pull/209694">#209694&lt;/a>).&lt;/strong> When clang sees something it doesn&amp;rsquo;t recognize, like an unknown attribute or a misspelled preprocessor directive, it runs an edit-distance search to suggest &amp;ldquo;did you mean X ?&amp;rdquo;. The problem is it was doing that search even when the warning that would show the suggestion is turned off. On Boost.MPL and the kernel headers that&amp;rsquo;s a huge pile of wasted scans, since the system headers trip it constantly, so only running it when the diagnostic is actually enabled is worth −1.2% on MPL and −0.2% on the kernel.&lt;/p>
+&lt;/li>
+&lt;/ol>
+&lt;h1 id="ai-usage-in-finding-regressions">AI Usage in finding regressions&lt;/h1>
+&lt;p>AI agents really helped in this project. Here are some points where AI was heavily utilised:&lt;/p>
+&lt;ol>
+&lt;li>I don&amp;rsquo;t really care about how MPL is built, or any of the 10 other projects, so agents helped set up the environments, dependencies, etc.&lt;/li>
+&lt;li>A lot of utility and helper scripts that are used in the benchmarking and the sweeps were made with the help of agents.&lt;/li>
+&lt;li>Agents were always monitoring the bisecting process, documenting interesting results as it goes, and intervening if there were any problems.&lt;/li>
+&lt;li>If it found a particular jump in the sweeps, it would continue focusing until it found the first bad commit.&lt;/li>
+&lt;li>Search the reviews and issues if the found regression is mentioned anywhere, or if the overhead was known when reviewing.&lt;/li>
+&lt;li>Check if the regression is still live on trunk and it wasn&amp;rsquo;t fixed or reverted already.&lt;/li>
+&lt;/ol>
+&lt;p>And since I am touching a lot of unfamiliar parts of clang it helped and misled me a lot of times when trying to understand related clang code, I avoided using it to directly make fixes if the fix is not super obvious.&lt;/p>
+&lt;h1 id="what-is-next">What is next&lt;/h1>
+&lt;p>Currently I have done a sweep on clangs with different options (&lt;code>-fsyntax-only&lt;/code>, &lt;code>-Wdocumentation&lt;/code>, &lt;code>-Wall -Wextra&lt;/code>, &lt;code>-std=c++20&lt;/code>, &lt;code>-O2&lt;/code>, &lt;code>-emit-llvm-only&lt;/code>)
+and mostly focused on benchmarking for Ir.
+Out of the 20 regressions found, only 8 were fixable so far.
+Most of them were already solved, or intrinsic, or too complicated to know if they are actually intrinsic or if they could possibly be improved.
+Currently I am making a sweep on peak-heap / total memory to hopefully find areas to improve, and will try other possible measurements.
+There are some issues that I have also put in my to-do. I will at least try to bisect the cause.&lt;/p></description></item><item><title>Automating LLVM Refactoring</title><link>https://almiraj.xyz/posts/automation/</link><pubDate>Wed, 18 Feb 2026 08:43:14 +0200</pubDate><guid>https://almiraj.xyz/posts/automation/</guid><description>&lt;h2 id="intro">Intro&lt;/h2>
+&lt;p>I like automation. I mean, I really like automation.&lt;/p>
+&lt;p>For me, it is the fundamental purpose of computing. It&amp;rsquo;s one of the main reasons behind my choice of OS and software, and why I love open source so much.&lt;/p>
+&lt;p>It&amp;rsquo;s why I use Linux. It&amp;rsquo;s why I like to write code in Neovim. It&amp;rsquo;s why, other than the browser, almost all the apps I use live in the terminal.&lt;/p>
+&lt;p>There&amp;rsquo;s nothing more satisfying than successfully automating something and seeing how much time it saved me. I feel really cool when I do that too (:&lt;/p>
+&lt;p>In this small article, I&amp;rsquo;d like to talk about some of the situations I&amp;rsquo;ve automated and some of the tools that facilitate this urge to automate everything.&lt;/p>
+&lt;p>I also plan on writing another related article that covers more of the CLI and TUI tools I use that helps me automate.&lt;/p>
+&lt;hr>
+&lt;h2 id="llvm">LLVM&lt;/h2>
+&lt;p>There&amp;rsquo;s a refactoring going on in LLVM right now (&lt;a href="https://discourse.llvm.org/t/rfc-make-clang-builtin-math-functions-constexpr-with-llvm-libc-to-support-c-23-constexpr-math-functions/86450">RFC&lt;/a>). I won&amp;rsquo;t go into all the details, but it basically involves moving files around, modifying function signatures, and editing dependencies in CMake and Bazel.&lt;/p>
+&lt;p>Here&amp;rsquo;s an example of how the refactoring is done with &lt;code>fabsf&lt;/code>:&lt;/p>
+&lt;ul>
+&lt;li>Extract the implementation from &lt;code>libc/src/math/generic/fabsf.cpp&lt;/code> into &lt;code>libc/src/__support/math/fabsf.h&lt;/code>&lt;/li>
+&lt;li>Rewrite the original &lt;code>.cpp&lt;/code> to just call the new header-only version&lt;/li>
+&lt;li>Create a shared wrapper at &lt;code>libc/shared/math/fabsf.h&lt;/code>&lt;/li>
+&lt;li>Add the include to &lt;code>libc/shared/math.h&lt;/code>&lt;/li>
+&lt;li>Update &lt;code>libc/src/__support/math/CMakeLists.txt&lt;/code> with the new header library target&lt;/li>
+&lt;li>Update &lt;code>libc/src/math/generic/CMakeLists.txt&lt;/code> to depend on the new support target&lt;/li>
+&lt;li>Update the Bazel &lt;code>BUILD.bazel&lt;/code> file with the support library and math function deps&lt;/li>
+&lt;li>Add a test case to &lt;code>libc/test/shared/shared_math_test.cpp&lt;/code> (this is the only step requiring knowledge about the actual function being refactored)&lt;/li>
+&lt;/ul>
+&lt;p>There are more than 400 functions that need to be refactored.&lt;/p>
+&lt;p>Initially, each function was picked up by someone doing their first one. Mistakes were natural. PRs were reviewed one to three times, and after each merge, all other PRs had to be rebased.&lt;/p>
+&lt;p>You can imagine how much time this took.&lt;/p>
+&lt;p>Progress so far:&lt;/p>
+&lt;p>Weeks 1-2:
+7 functions merged (25 pending that still needed reviewing and rebasing)&lt;/p>
+&lt;p>Weeks 3-4:
+27 functions merged (24 pending)&lt;/p>
+&lt;p>Even though it got faster, it still felt slow. At that pace, refactoring could easily take 2-3 months.&lt;/p>
+&lt;p>After two of my manual PRs got merged, I was already bored. I didn&amp;rsquo;t want to keep doing this manually.&lt;/p>
+&lt;p>But I realized most of these operations could be automated which is a much more interesting problem.&lt;/p>
+&lt;h3 id="treesitter-and-regex">Treesitter and Regex&lt;/h3>
+&lt;p>I wrote &lt;a href="https://github.com/AnonMiraj/refactinator">the tool&lt;/a> in Rust since I wanted more experience with it (Python might have been easier, though).&lt;/p>
+&lt;p>The main tool behind the refactoring was Tree-sitter.&lt;/p>
+&lt;p>I first learned about Tree-sitter when I started using Neovim. Back then, I thought it was just a fancy way to do syntax highlighting. It&amp;rsquo;s much more than that.&lt;/p>
+&lt;p>With Tree-sitter, I can parse C++ files and directly manipulate the AST.&lt;/p>
+&lt;p>Now I can:&lt;/p>
+&lt;ul>
+&lt;li>Inject specific namespaces around certain functions&lt;/li>
+&lt;li>Extract function contents, signatures, and arguments&lt;/li>
+&lt;li>Modify them programmatically&lt;/li>
+&lt;/ul>
+&lt;p>And with Regex, I can:&lt;/p>
+&lt;ul>
+&lt;li>Find the correct place to inject information into the shared test file&lt;/li>
+&lt;li>Edit Bazel and CMake files automatically&lt;/li>
+&lt;li>Modify dependency lists&lt;/li>
+&lt;/ul>
+&lt;p>With the first version of the tool, it already handled about 90% of the refactoring. I only needed minimal manual work and to fix nitpicks caused by small bugs.&lt;/p>
+&lt;p>After refactoring five functions with it, I caught most of the nitpicks. Now the entire process is automated.&lt;/p>
+&lt;p>The only exception is adding proper test cases in &lt;code>shared_test&lt;/code>, which requires some basic knowledge about the function&amp;rsquo;s inputs and outputs. Currently, the tool inserts placeholder zeros for inputs and expected return values.&lt;/p>
+&lt;p>Hypothetically, this could be automated with an LLM, but I didn&amp;rsquo;t feel the need. Learning more about math functions is interesting, so I&amp;rsquo;m fine doing that part manually.&lt;/p>
+&lt;h3 id="bash-script">Bash Script&lt;/h3>
+&lt;p>Since I got bored manually creating a new PR and issue for each function family, I wrote a small Bash script to automate that too.&lt;/p>
+&lt;p>The script:&lt;/p>
+&lt;ul>
+&lt;li>Takes the names of the functions to refactor&lt;/li>
+&lt;li>Runs the refactorinator on each one&lt;/li>
+&lt;li>Lets me inspect the changes&lt;/li>
+&lt;li>Runs the tests&lt;/li>
+&lt;li>Publishes the issue and PR if everything passes&lt;/li>
+&lt;/ul>
+&lt;p>And just like that, most of the remaining functions were refactored by me and a friend in less than a week.&lt;/p></description></item></channel></rss>

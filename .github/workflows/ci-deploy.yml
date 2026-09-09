@@ -1,0 +1,58 @@
+# Build the almiraj Hugo site and publish it to the `gh-pages` branch.
+#
+# The VPS (NixOS blog.nix) serves the built site by pulling this branch, so the
+# box never runs hugo/npm. Uses peaceiris actions (actions-hugo to build,
+# actions-gh-pages to publish).
+name: Build + publish almiraj blog
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Pin Hugo so the build is reproducible and not broken by a newer Hugo
+      # removing config keys the theme still uses (e.g. .Site.Author).
+      - uses: peaceiris/actions-hugo@v3
+        with:
+          hugo-version: "0.140.0"
+          extended: true
+
+      # Hugo toCSS (SCSS) needs the standalone dart-sass binary (embedded
+      # protocol). The npm `sass`/`sass-embedded` packages don't expose it to
+      # Hugo, so download the official release instead.
+      - name: Install standalone dart-sass
+        run: |
+          curl -fsSL -o /tmp/dart-sass.tar.gz \
+            https://github.com/sass/dart-sass/releases/download/1.77.8/dart-sass-1.77.8-linux-x64.tar.gz
+          tar -xzf /tmp/dart-sass.tar.gz -C /tmp
+          echo "/tmp/dart-sass" >> "$GITHUB_PATH"
+
+      # Keep node for any postcss build step the theme may use via Hugo.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install npm build deps (postcss)
+        run: npm ci
+
+      - name: Build site
+        run: hugo --minify --destination public
+
+      # Commit public/ to the gh-pages branch. The VPS pulls this branch and
+      # serves it from /var/www/almiraj (see NixOS blog.nix).
+      - uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./public
+          publish_branch: gh-pages
+          force_orphan: true

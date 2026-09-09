@@ -1,0 +1,69 @@
+:root {
+  /* Catppuccin Latte (Light) */
+  --bg_h: #e6e9ef; /* Mantle */
+  --bg: #eff1f5;   /* Base */
+  --bg_s: #e6e9ef; /* Mantle */
+  --bg1: #dce0e8;  /* Crust */
+  --bg2: #ccd0da;  /* Surface 0 */
+  --bg3: #bcc0cc;  /* Surface 1 */
+  --bg4: #acb0be;  /* Surface 2 */
+
+  --fg: #4c4f69;   /* Text */
+  --fg1: #5c5f77;  /* Subtext 1 */
+  --fg2: #6c6f85;  /* Subtext 0 */
+  --fg3: #7c7f93;  /* Overlay 2 */
+  --fg4: #8c8fa1;  /* Overlay 1 */
+
+  --red: #d20f39;
+  --green: #40a02b;
+  --yellow: #df8e1d;
+  --blue: #1e66f5;
+  --purple: #8839ef; /* Mauve */
+  --aqua: #179299;   /* Teal */
+  --orange: #fe640b;
+  --gray: #9ca0b0;   /* Overlay 0 */
+
+  --red-dim: #d20f39;
+  --green-dim: #40a02b;
+  --yellow-dim: #df8e1d;
+  --blue-dim: #1e66f5;
+  --purple-dim: #8839ef;
+  --aqua-dim: #179299;
+  --orange-dim: #fe640b;
+  --gray-dim: #9ca0b0;
+}
+
+.darkmode {
+  /* Catppuccin Mocha (Dark) */
+  --bg_h: #181825; /* Mantle */
+  --bg: #1e1e2e;   /* Base */
+  --bg_s: #181825; /* Mantle */
+  --bg1: #11111b;  /* Crust */
+  --bg2: #313244;  /* Surface 0 */
+  --bg3: #45475a;  /* Surface 1 */
+  --bg4: #585b70;  /* Surface 2 */
+
+  --fg: #cdd6f4;   /* Text */
+  --fg1: #bac2de;  /* Subtext 1 */
+  --fg2: #a6adc8;  /* Subtext 0 */
+  --fg3: #9399b2;  /* Overlay 2 */
+  --fg4: #7f849c;  /* Overlay 1 */
+
+  --red: #f38ba8;
+  --green: #a6e3a1;
+  --yellow: #f9e2af;
+  --blue: #89b4fa;
+  --purple: #cba6f7; /* Mauve */
+  --aqua: #94e2d5;   /* Teal */
+  --orange: #fab387;
+  --gray: #6c7086;   /* Overlay 0 */
+
+  --red-dim: #f38ba8;
+  --green-dim: #a6e3a1;
+  --yellow-dim: #f9e2af;
+  --blue-dim: #89b4fa;
+  --purple-dim: #cba6f7;
+  --aqua-dim: #94e2d5;
+  --gray-dim: #6c7086;
+  --orange-dim: #fab387;
+}

@@ -1,0 +1,73 @@
+@use "vars" as *;
+
+body {
+  font-family: 'Amiri-Regular', 'Almarai-Regular', 'Tajawal-Regular', "Latin Modern Roman", "Times New Roman", serif;
+  direction: rtl;
+  text-align: right;
+}
+
+h1, h2, h3, h4, h5, h6, .title, .post-title {
+  font-family: 'ElMessiri-Bold', 'NotoKufiArabic-Bold', 'Amiri-Bold', serif;
+}
+
+/* Common overrides */
+time {
+  margin-left: 0;
+  margin-right: 1rem;
+}
+
+#header > nav > span > a:after {
+  transform-origin: bottom left;
+}
+
+#header > nav > span > a:hover:after {
+  transform-origin: bottom right;
+}
+
+.header-controls {
+  right: auto;
+  left: $padding;
+
+  @media screen and (max-width: $mobile-breakpoint) {
+    left: calc((4px + $margin) / 2);
+  }
+}
+
+.icon svg {
+  margin-right: 0.3em;
+}
+
+/* List page overrides */
+#main > .post-group > ul {
+  border-left: none;
+  border-right: var(--fg4) solid $border;
+  margin-left: 0;
+  margin-right: 0.5rem;
+  padding-left: 0;
+  padding-right: $margin;
+
+  @media screen and (min-width: $mobile-breakpoint) {
+    margin-right: 1rem;
+    padding-right: 2rem;
+  }
+}
+
+#main > .post-group > ul > li > time {
+  text-align: left;
+}
+
+#searchbox #ddgSearch input {
+  padding-left: 0;
+  padding-right: 10px;
+}
+
+#searchbox #ddgSearch button {
+  right: auto;
+  left: 1em;
+}
+
+/* Code block overrides (always LTR) */
+pre, code {
+  direction: ltr;
+  text-align: left;
+}

@@ -1,0 +1,25 @@
+<script>
+  (function() {
+    const darkMode = localStorage.getItem("darkMode");
+    const prefersDarkMode = window.matchMedia("(prefers-color-scheme: dark)");
+    if (darkMode === "enabled" || (darkMode === null && prefersDarkMode.matches)) {
+      document.documentElement.classList.add("darkmode");
+    }
+
+    // Language Redirection
+    const storedLang = localStorage.getItem("pref-lang");
+    const currentLang = "{{ .Language.Lang }}";
+
+    // Only redirect if stored preference differs from current page language
+    if (storedLang && storedLang !== currentLang) {
+      // Find the translated URL if available
+      {{ if .IsTranslated }}
+        {{ range .Translations }}
+          if ("{{ .Language.Lang }}" === storedLang) {
+            window.location.href = "{{ .Permalink }}";
+          }
+        {{ end }}
+      {{ end }}
+    }
+  })();
+</script>
